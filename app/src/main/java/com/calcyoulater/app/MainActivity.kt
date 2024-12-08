@@ -73,6 +73,7 @@ import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.Close
 
 
@@ -86,7 +87,6 @@ data class SecretFile(
 class MainActivity : AppCompatActivity() {
 
     private val dataStoreManager by lazy { DataStoreManager(applicationContext) }
-
     private val pickFileLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             uri?.let {
@@ -96,6 +96,16 @@ class MainActivity : AppCompatActivity() {
         }
 
     private val files = mutableStateOf(listOf<SecretFile>())
+    private val decoyFiles = listOf(
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy"), "Decoy Image 1", "dummy.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy1"), "Decoy Image 2", "dummy1.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy2"), "Decoy Image 3", "dummy2.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy7"), "Decoy Image 4", "dummy7.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy3"), "Decoy Image 5", "dummy3.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy5"), "Decoy Image 6", "dummy5.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy6"), "Decoy Image 7", "dummy6.png")
+    )
+
     private val currentScreen = mutableStateOf("Calculator") // Default to Calculator screen
     private val selectedFileIndex = mutableStateOf(0) // Default to the first image
     private val isFirstTimeUser = mutableStateOf(true) // Assume the user is new by default
@@ -103,152 +113,107 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Prevent content from appearing in Recent Apps/Multitasking View
-        window.setFlags(
-            android.view.WindowManager.LayoutParams.FLAG_SECURE,
-            android.view.WindowManager.LayoutParams.FLAG_SECURE
-        )
+                // Globally apply FLAG_SECURE to prevent content from appearing in Recent Apps/Multitasking View
+                applyFlagSecure()
 
+            // Set up status bar
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                val insetsController = WindowInsetsControllerCompat(window, window.decorView)
+                insetsController.isAppearanceLightStatusBars = true // Light text/icons on black background
+                window.statusBarColor = android.graphics.Color.BLACK // Set to black
+                println("Status bar color set to black")
+            }
 
-
-        // Ensure status bar color is set correctly across all API levels
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            WindowCompat.setDecorFitsSystemWindows(window, true)
-            val insetsController = WindowInsetsControllerCompat(window, window.decorView)
-            insetsController.isAppearanceLightStatusBars = true // Light text/icons on black background
-            window.statusBarColor = android.graphics.Color.BLACK // Set to black
-            println("Status bar color set to black")
-        }
-
-        // Load first-time user state
-        val sharedPreferences = getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
+            // Load first-time user state
+            val sharedPreferences = getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
         isFirstTimeUser.value = sharedPreferences.getBoolean("isFirstTimeUser", true)
 
         // Load files from DataStore
         lifecycleScope.launch {
-
             dataStoreManager.getFiles().collect { fileUris ->
                 files.value = fileUris.map { uri ->
                     val actualFileName = Uri.parse(uri).lastPathSegment ?: "unknown_file"
-
                     SecretFile(
                         uri = Uri.parse(uri),
                         name = uri,
                         actualFileName = actualFileName
                     )
                 }
-
             }
         }
 
         val selectedFile = mutableStateOf<SecretFile?>(null)
 
-
+        // Set content
         setContent {
-            println("Setting content...")
             CalcYouLaterTheme {
                 when (currentScreen.value) {
-                    "Calculator" -> {
-                        println("Navigating to CalculatorScreen")
-                        CalculatorScreen(
-                            onAddFile = {
-                                println("Launching file picker...")
-                                pickFileLauncher.launch(arrayOf("image/*"))
-                            },
-                            files = files.value,
-                            onImageClick = { println("Image clicked in CalculatorScreen") },
-                            onSwitchToVault = {
-                                println("Switch to Vault initiated. isFirstTimeUser: ${isFirstTimeUser.value}")
-                                if (isFirstTimeUser.value) {
-                                    println("Navigating to PasswordSetup")
-                                    currentScreen.value = "PasswordSetup" // Navigate to PasswordSetup
-                                } else {
-                                    println("Navigating to PasswordScreen")
-                                    currentScreen.value = "PasswordScreen" // Navigate to PasswordScreen
-                                }
-                            },
-                            onPasswordSetup = {
-                                println("Navigating to PasswordSetup from CalculatorScreen")
+                    "Calculator" -> CalculatorScreen(
+                        onAddFile = { pickFileLauncher.launch(arrayOf("image/*")) },
+                        files = files.value,
+                        onImageClick = { println("Image clicked in CalculatorScreen") },
+                        onSwitchToVault = {
+                            if (isFirstTimeUser.value) {
                                 currentScreen.value = "PasswordSetup"
-                            },
-                            onPiButtonTapped = {
-                                println("Navigating to PasswordScreen from CalculatorScreen")
+                            } else {
                                 currentScreen.value = "PasswordScreen"
-                            },
-                            isFirstTime = isFirstTimeUser.value
-                        )
-                    }
-                    "PasswordSetup" -> {
-                        println("Navigating to PasswordSetupScreen")
-                        PasswordSetupScreen(
-                            onPasswordSet = {
-                                println("Password successfully set. Updating isFirstTimeUser...")
-                                setFirstTimeUserFlag(false) // Persist the value
-                                isFirstTimeUser.value = false // Update the state
-                                currentScreen.value = "PasswordScreen" // Navigate to Password Screen
                             }
-                        )
-                    }
-                    "Vault" -> {
-                        println("Navigating to VaultScreen")
-                        VaultScreen(
-                            files = files.value,
-                            onAddFile = {
-                                println("Launching file picker from VaultScreen...")
-                                pickFileLauncher.launch(arrayOf("image/*"))
-                            },
-                            onImageClick = { file ->
-                                println("Image clicked in Vault: $file")
-                                val index = files.value.indexOf(file)
-                                if (index != -1) {
-                                    println("Navigating to FullScreenImageViewer for file index: $index")
-                                    selectedFileIndex.value = index
-                                    currentScreen.value = "FullScreenImageViewer"
-                                } else {
-                                    println("File not found in the list")
-                                }
-                            },
-                            onBack = {
-                                println("Navigating back to CalculatorScreen from Vault")
-                                currentScreen.value = "Calculator"
-                            },
-                            onDeleteFromVault = { file ->
-                                println("Deleting file from Vault: $file")
-                                deleteFromVault(file)
-                            },
-                            onMoveOutOfVault = { file ->
-                                println("Moving file out of Vault: $file")
-                                moveOutOfVault(file)
+                        },
+                        onPasswordSetup = { currentScreen.value = "PasswordSetup" },
+                        onPiButtonTapped = { currentScreen.value = "PasswordScreen" },
+                        isFirstTime = isFirstTimeUser.value
+                    )
+                    "PasswordSetup" -> PasswordSetupScreen(
+                        onPasswordSet = {
+                            setFirstTimeUserFlag(false)
+                            isFirstTimeUser.value = false
+                            currentScreen.value = "PasswordScreen"
+                        }
+                    )
+                    "Vault" -> VaultScreen(
+                        files = files.value,
+                        onAddFile = { pickFileLauncher.launch(arrayOf("image/*")) },
+                        onImageClick = { file ->
+                            val index = files.value.indexOf(file)
+                            if (index != -1) {
+                                selectedFileIndex.value = index
+                                currentScreen.value = "FullScreenImageViewer"
                             }
-                        )
-                    }
-                    "PasswordScreen" -> {
-                        println("Navigating to PasswordScreen")
-                        PasswordScreen(
-                            onPasswordCorrect = {
-                                println("Password correct. Navigating to Vault")
-                                currentScreen.value = "Vault"
-                            },
-                            onPasswordIncorrect = {
-                                println("Password incorrect. Navigating back to Calculator")
-                                currentScreen.value = "Calculator"
-                            }
-                        )
-                    }
-                    "FullScreenImageViewer" -> {
-                        println("Navigating to FullScreenImageViewer")
-                        FullScreenImageViewer(
-                            files = files.value,
-                            selectedIndex = selectedFileIndex.value,
-                            onClose = {
-                                println("Closing FullScreenImageViewer and returning to Vault")
+                        },
+                        onBack = { currentScreen.value = "Calculator" },
+                        onDeleteFromVault = { file -> deleteFromVault(file) },
+                        onMoveOutOfVault = { file -> moveOutOfVault(file) }
+                    )
+                    "PasswordScreen" -> PasswordScreen(
+                        onPasswordCorrect = { decoy ->
+                            if (decoy) {
+                                currentScreen.value = "DecoyVault"
+                            } else {
                                 currentScreen.value = "Vault"
                             }
-                        )
-                    }
-                    else -> {
-                        println("Unknown screen: ${currentScreen.value}")
-                    }
+                        },
+                        onDecoyPassword = {
+                            currentScreen.value = "DecoyVault"
+                        },
+                        onPasswordIncorrect = {
+                            currentScreen.value = "Calculator"
+                        }
+                    )
+
+                    "FullScreenImageViewer" -> FullScreenImageViewer(
+                        files = files.value,
+                        selectedIndex = selectedFileIndex.value,
+                        onClose = { currentScreen.value = "Vault" }
+                    )
+                    "DecoyVault" -> DecoyVaultScreen(
+                        decoyFiles = decoyFiles,
+                        onAddFile = { println("Add File is disabled in Decoy Vault") },
+                        onImageClick = { println("Image clicked in Decoy Vault") },
+                        onBack = { currentScreen.value = "Calculator" },
+                        onDeleteFromVault = { println("Delete operation not allowed in Decoy Vault") },
+                        onMoveOutOfVault = { println("Move operation not allowed in Decoy Vault") }
+                    )
                 }
             }
         }
@@ -256,14 +221,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        // Apply FLAG_SECURE globally to prevent multitasking view content exposure
+        applyFlagSecure()
+
+        // Check if the app is returning from the background
         if (currentScreen.value == "Vault" || currentScreen.value == "FullScreenImageViewer") {
-            window.setFlags(
-                android.view.WindowManager.LayoutParams.FLAG_SECURE,
-                android.view.WindowManager.LayoutParams.FLAG_SECURE
-            )
+            currentScreen.value = "PasswordScreen" // Force the user to re-enter the password
         } else {
-            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            println("App resumed on non-secure screen: ${currentScreen.value}")
         }
+    }
+
+
+    // Applies FLAG_SECURE to ensure content is hidden in multitasking view
+    private fun applyFlagSecure() {
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE
+        )
     }
 
     private fun setFirstTimeUserFlag(isFirstTime: Boolean) {
@@ -274,7 +250,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     private fun onFilePicked(uri: Uri) {
         val fileName = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -284,7 +259,6 @@ class MainActivity : AppCompatActivity() {
                 null
             }
         } ?: "unknown_file_${System.currentTimeMillis()}"
-
 
         val inputStream = contentResolver.openInputStream(uri)
         if (inputStream != null) {
@@ -312,84 +286,50 @@ class MainActivity : AppCompatActivity() {
                     dataStoreManager.saveFiles(updatedFiles.map { it.uri.toString() }.toSet())
                 }
 
-                try {
-                    val deleted = DocumentsContract.deleteDocument(contentResolver, uri)
-
-                } catch (e: Exception) {
-                    println("Error deleting original file using DocumentsContract: ${e.message}")
-                }
+                DocumentsContract.deleteDocument(contentResolver, uri)
             } catch (e: Exception) {
-                println("Failed to move file to private storage: ${e.message}")
+                println("Error: ${e.message}")
             }
-        } else {
-            println("Failed to open input stream for URI: $uri")
         }
     }
 
     private fun deleteFromVault(file: SecretFile) {
-
         lifecycleScope.launch {
             val vaultDir = File(filesDir, "vault")
             val fileToDelete = File(vaultDir, file.actualFileName)
-
-
             if (fileToDelete.exists()) {
                 if (fileToDelete.delete()) {
-
                     val updatedFiles = files.value.filterNot { it.uri == file.uri }
                     files.value = updatedFiles
-
                     dataStoreManager.saveFiles(updatedFiles.map { it.uri.toString() }.toSet())
-                } else {
-                    println("Failed to delete file: ${fileToDelete.path}")
                 }
-            } else {
-                println("File not found in vault: ${fileToDelete.path}")
             }
         }
     }
 
     private fun moveOutOfVault(file: SecretFile) {
-        println("moveOutOfVault called with file: ${file.actualFileName}")
         lifecycleScope.launch {
             val vaultDir = File(filesDir, "vault")
             val fileInVault = File(vaultDir, file.actualFileName)
             val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-
-            println("Vault directory: ${vaultDir.path}")
-            println("Public directory: ${publicDir.path}")
-
-            if (!publicDir.exists()) {
-                publicDir.mkdirs()
-                println("Public directory created: ${publicDir.path}")
-            }
-
+            if (!publicDir.exists()) publicDir.mkdirs()
             val movedFile = File(publicDir, file.actualFileName)
 
             if (fileInVault.exists()) {
                 try {
-                    println("Attempting to copy file to public directory: ${movedFile.path}")
                     fileInVault.copyTo(movedFile, overwrite = true)
                     if (fileInVault.delete()) {
-                        println("File deleted from vault after moving: ${fileInVault.path}")
                         val updatedFiles = files.value.filterNot { it.uri == file.uri }
                         files.value = updatedFiles
-                        println("Updated files list after moving out of vault: ${files.value}")
                         dataStoreManager.saveFiles(updatedFiles.map { it.uri.toString() }.toSet())
-                    } else {
-                        println("Failed to delete original file after moving: ${fileInVault.path}")
                     }
                 } catch (e: Exception) {
-                    println("Error while moving file out of vault: ${e.message}")
+                    println("Error moving file: ${e.message}")
                 }
-            } else {
-                println("File not found in vault: ${fileInVault.path}")
             }
         }
     }
 }
-
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -481,7 +421,10 @@ fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
         Button(
             onClick = {
                 if (step == 1) {
-                    if (password.length == 4) {
+                    if (password == "4836") {
+                        errorMessage = "This PIN is reserved. Please choose another."
+                        password = "" // Reset the input
+                    } else if (password.length == 4) {
                         step = 2
                         errorMessage = null
                     } else {
@@ -513,21 +456,17 @@ fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
     }
 }
 
-
-
-
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordScreen(
-    onPasswordCorrect: () -> Unit,
-    onPasswordIncorrect: () -> Unit
+    onPasswordCorrect: (Boolean) -> Unit, // Boolean to indicate decoy vault
+    onDecoyPassword: () -> Unit, // For specific decoy password logic
+    onPasswordIncorrect: () -> Unit // For incorrect password
 ) {
     val context = LocalContext.current
     val sharedPreferences = context.getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
     val correctPassword = sharedPreferences.getString("userPassword", "") ?: ""
-
+    val decoyPassword = "4836" // Reserved password for the decoy vault
 
     var countdown by remember { mutableStateOf(15) }
     var password by remember { mutableStateOf("") }
@@ -546,7 +485,7 @@ fun PasswordScreen(
             countdown--
         }
         if (countdown == 0) {
-            onPasswordIncorrect() // Timeout logic
+            onPasswordIncorrect() // Trigger timeout
         }
     }
 
@@ -594,11 +533,17 @@ fun PasswordScreen(
                         }
 
                         if (password.length == 4) {
-
-                            if (password == correctPassword) {
-                                onPasswordCorrect()
-                            } else {
-                                onPasswordIncorrect()
+                            when (password) {
+                                correctPassword -> {
+                                    onPasswordCorrect(false) // Navigate to actual vault
+                                }
+                                decoyPassword -> {
+                                    onPasswordCorrect(true) // Navigate to decoy vault
+                                }
+                                else -> {
+                                    password = "" // Reset on incorrect password
+                                    onPasswordIncorrect()
+                                }
                             }
                         }
                     },
@@ -625,18 +570,12 @@ fun PasswordScreen(
     }
 }
 
-
-
-
-
-
-
 @Composable
 fun CalculatorScreen(
     onAddFile: () -> Unit,
     files: List<SecretFile>,
     onImageClick: (SecretFile) -> Unit,
-    onSwitchToVault: () -> Unit, // Added parameter for switching screens
+    onSwitchToVault: () -> Unit,
     onPiButtonTapped: () -> Unit,
     onPasswordSetup: () -> Unit,
     isFirstTime: Boolean
@@ -658,7 +597,7 @@ fun CalculatorScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Calculator Display
+        // Calculator Display with Backspace
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -670,14 +609,36 @@ fun CalculatorScreen(
                 .padding(16.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            Text(
-                text = displayText,
-                color = Color.White,
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                modifier = Modifier.padding(end = 8.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = displayText,
+                    color = Color.White,
+                    fontSize = 56.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                )
+
+                // Backspace Button
+                IconButton(
+                    onClick = {
+                        if (displayText.isNotEmpty()) {
+                            displayText = displayText.dropLast(1)
+                            if (displayText.isEmpty()) displayText = "0"
+                        }
+                    },
+                    enabled = displayText.isNotEmpty() && displayText != "0" // Disable if no text
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_backspace), // Use custom backspace drawable
+                        contentDescription = "Backspace",
+                        tint = if (displayText.isNotEmpty() && displayText != "0") Color.White else Color.Gray
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -685,18 +646,14 @@ fun CalculatorScreen(
         // Buttons Grid
         ButtonGrid(
             onButtonClick = { buttonValue ->
-
                 if (buttonValue == "π") {
                     piTapCount++
 
                     if (piTapCount == 6) {
-
                         piTapCount = 0
                         if (isFirstTime) {
-
                             onPasswordSetup()
                         } else {
-
                             onPiButtonTapped()
                         }
                     }
@@ -705,16 +662,13 @@ fun CalculatorScreen(
 
                     displayText = when (buttonValue) {
                         "C" -> {
-
                             "0"
                         }
                         "=" -> {
-
                             evaluateExpression(displayText)
                         }
                         else -> {
                             val updatedText = if (displayText == "0") buttonValue else displayText + buttonValue
-
                             updatedText
                         }
                     }
@@ -723,9 +677,6 @@ fun CalculatorScreen(
         )
     }
 }
-
-
-
 
 
 @Composable
@@ -783,14 +734,6 @@ fun ButtonGrid(onButtonClick: (String) -> Unit) {
         }
     }
 }
-
-
-
-
-
-
-
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -963,7 +906,169 @@ fun VaultScreen(
 }
 
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun DecoyVaultScreen(
+    decoyFiles: List<SecretFile>, // Decoy files specific to this screen
+    onAddFile: () -> Unit,
+    onImageClick: (SecretFile) -> Unit,
+    onBack: () -> Unit,
+    onDeleteFromVault: (SecretFile) -> Unit,
+    onMoveOutOfVault: (SecretFile) -> Unit
+) {
 
+    var selectedFile by remember { mutableStateOf<SecretFile?>(null) }
+
+    selectedFile?.let { file ->
+
+        AlertDialog(
+            onDismissRequest = {
+                selectedFile = null
+            },
+            title = {
+                Text(
+                    text = "Manage File",
+                    color = Color.Black,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "What would you like to do with this file?",
+                    color = Color.DarkGray,
+                    fontSize = 16.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteFromVault(file)
+                        selectedFile = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Delete from Vault")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        onMoveOutOfVault(file)
+                        selectedFile = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Move Out of Vault")
+                }
+            },
+            containerColor = Color(0xFFF5F5F5),
+            tonalElevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF2E2E2E))
+            .padding(16.dp)
+    ) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Button(
+                onClick = {
+                    onBack()
+                },
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+            ) {
+                Text("Back", color = Color.Black)
+            }
+            Button(
+                onClick = {
+                    onAddFile()
+                },
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+            ) {
+                Text("Add File", color = Color.Black)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (decoyFiles.isEmpty()) {
+            Text(
+                "Vault is empty. Add your secret files here.",
+                fontSize = 18.sp,
+                color = Color.Gray,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+        } else {
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(100.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(decoyFiles) { file ->
+
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                            .combinedClickable(
+                                onClick = {
+                                    onImageClick(file)
+                                },
+                                onLongClick = {
+                                    selectedFile = file
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(file.uri),
+                            contentDescription = file.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(
+                                    Color.Black.copy(alpha = 0.7f),
+                                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
+                                )
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = file.actualFileName.take(15),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun VaultFileItem(
@@ -1086,10 +1191,6 @@ fun FullScreenImageViewer(
     }
 }
 
-
-
-
-
 @Composable
 fun CalculatorDisplay(displayText: String) {
     Text(
@@ -1100,10 +1201,6 @@ fun CalculatorDisplay(displayText: String) {
         fontSize = 48.sp
     )
 }
-
-
-
-
 
 fun evaluateExpression(expression: String): String {
     return try {
