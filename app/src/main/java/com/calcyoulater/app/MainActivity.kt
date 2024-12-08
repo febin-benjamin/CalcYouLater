@@ -73,8 +73,9 @@ import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 
 
 data class SecretFile(
@@ -96,16 +97,6 @@ class MainActivity : AppCompatActivity() {
         }
 
     private val files = mutableStateOf(listOf<SecretFile>())
-    private val decoyFiles = listOf(
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy"), "Decoy Image 1", "dummy.png"),
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy1"), "Decoy Image 2", "dummy1.png"),
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy2"), "Decoy Image 3", "dummy2.png"),
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy7"), "Decoy Image 4", "dummy7.png"),
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy3"), "Decoy Image 5", "dummy3.png"),
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy5"), "Decoy Image 6", "dummy5.png"),
-        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy6"), "Decoy Image 7", "dummy6.png")
-    )
-
     private val currentScreen = mutableStateOf("Calculator") // Default to Calculator screen
     private val selectedFileIndex = mutableStateOf(0) // Default to the first image
     private val isFirstTimeUser = mutableStateOf(true) // Assume the user is new by default
@@ -113,20 +104,20 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-                // Globally apply FLAG_SECURE to prevent content from appearing in Recent Apps/Multitasking View
-                applyFlagSecure()
+        // Globally apply FLAG_SECURE to prevent content from appearing in Recent Apps/Multitasking View
+        applyFlagSecure()
 
-            // Set up status bar
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                val insetsController = WindowInsetsControllerCompat(window, window.decorView)
-                insetsController.isAppearanceLightStatusBars = true // Light text/icons on black background
-                window.statusBarColor = android.graphics.Color.BLACK // Set to black
-                println("Status bar color set to black")
-            }
+        // Set up status bar
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            val insetsController = WindowInsetsControllerCompat(window, window.decorView)
+            insetsController.isAppearanceLightStatusBars = true // Light text/icons on black background
+            window.statusBarColor = android.graphics.Color.BLACK // Set to black
+            println("Status bar color set to black")
+        }
 
-            // Load first-time user state
-            val sharedPreferences = getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
+        // Load first-time user state
+        val sharedPreferences = getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
         isFirstTimeUser.value = sharedPreferences.getBoolean("isFirstTimeUser", true)
 
         // Load files from DataStore
@@ -186,33 +177,13 @@ class MainActivity : AppCompatActivity() {
                         onMoveOutOfVault = { file -> moveOutOfVault(file) }
                     )
                     "PasswordScreen" -> PasswordScreen(
-                        onPasswordCorrect = { decoy ->
-                            if (decoy) {
-                                currentScreen.value = "DecoyVault"
-                            } else {
-                                currentScreen.value = "Vault"
-                            }
-                        },
-                        onDecoyPassword = {
-                            currentScreen.value = "DecoyVault"
-                        },
-                        onPasswordIncorrect = {
-                            currentScreen.value = "Calculator"
-                        }
+                        onPasswordCorrect = { currentScreen.value = "Vault" },
+                        onPasswordIncorrect = { currentScreen.value = "Calculator" }
                     )
-
                     "FullScreenImageViewer" -> FullScreenImageViewer(
                         files = files.value,
                         selectedIndex = selectedFileIndex.value,
                         onClose = { currentScreen.value = "Vault" }
-                    )
-                    "DecoyVault" -> DecoyVaultScreen(
-                        decoyFiles = decoyFiles,
-                        onAddFile = { println("Add File is disabled in Decoy Vault") },
-                        onImageClick = { println("Image clicked in Decoy Vault") },
-                        onBack = { currentScreen.value = "Calculator" },
-                        onDeleteFromVault = { println("Delete operation not allowed in Decoy Vault") },
-                        onMoveOutOfVault = { println("Move operation not allowed in Decoy Vault") }
                     )
                 }
             }
@@ -227,6 +198,7 @@ class MainActivity : AppCompatActivity() {
 
         // Check if the app is returning from the background
         if (currentScreen.value == "Vault" || currentScreen.value == "FullScreenImageViewer") {
+            println("App resumed while on a secure screen. Redirecting to PasswordScreen.")
             currentScreen.value = "PasswordScreen" // Force the user to re-enter the password
         } else {
             println("App resumed on non-secure screen: ${currentScreen.value}")
@@ -331,6 +303,9 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
@@ -421,10 +396,7 @@ fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
         Button(
             onClick = {
                 if (step == 1) {
-                    if (password == "4836") {
-                        errorMessage = "This PIN is reserved. Please choose another."
-                        password = "" // Reset the input
-                    } else if (password.length == 4) {
+                    if (password.length == 4) {
                         step = 2
                         errorMessage = null
                     } else {
@@ -456,17 +428,21 @@ fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
     }
 }
 
+
+
+
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordScreen(
-    onPasswordCorrect: (Boolean) -> Unit, // Boolean to indicate decoy vault
-    onDecoyPassword: () -> Unit, // For specific decoy password logic
-    onPasswordIncorrect: () -> Unit // For incorrect password
+    onPasswordCorrect: () -> Unit,
+    onPasswordIncorrect: () -> Unit
 ) {
     val context = LocalContext.current
     val sharedPreferences = context.getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
     val correctPassword = sharedPreferences.getString("userPassword", "") ?: ""
-    val decoyPassword = "4836" // Reserved password for the decoy vault
+
 
     var countdown by remember { mutableStateOf(15) }
     var password by remember { mutableStateOf("") }
@@ -485,7 +461,7 @@ fun PasswordScreen(
             countdown--
         }
         if (countdown == 0) {
-            onPasswordIncorrect() // Trigger timeout
+            onPasswordIncorrect() // Timeout logic
         }
     }
 
@@ -533,17 +509,11 @@ fun PasswordScreen(
                         }
 
                         if (password.length == 4) {
-                            when (password) {
-                                correctPassword -> {
-                                    onPasswordCorrect(false) // Navigate to actual vault
-                                }
-                                decoyPassword -> {
-                                    onPasswordCorrect(true) // Navigate to decoy vault
-                                }
-                                else -> {
-                                    password = "" // Reset on incorrect password
-                                    onPasswordIncorrect()
-                                }
+
+                            if (password == correctPassword) {
+                                onPasswordCorrect()
+                            } else {
+                                onPasswordIncorrect()
                             }
                         }
                     },
@@ -570,6 +540,13 @@ fun PasswordScreen(
     }
 }
 
+
+
+
+
+
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalculatorScreen(
     onAddFile: () -> Unit,
@@ -597,7 +574,7 @@ fun CalculatorScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Calculator Display with Backspace
+        // Editable Display Box with Backspace
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -606,31 +583,47 @@ fun CalculatorScreen(
                     color = Color(0xFF1F1F1F),
                     shape = RoundedCornerShape(16.dp)
                 )
-                .padding(16.dp),
-            contentAlignment = Alignment.CenterEnd
+                .padding(16.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = displayText,
-                    color = Color.White,
-                    fontSize = 56.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                // Editable TextField for display
+                TextField(
+                    value = displayText,
+                    onValueChange = { newValue ->
+                        // Prevent invalid input
+                        displayText = newValue.filter { it.isDigit() || "+-*/.%()".contains(it) }
+                        if (displayText.isEmpty()) displayText = "0"
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    textStyle = TextStyle(
+                        color = Color.White, // Set the text color here
+                        fontSize = 32.sp,
+                        textAlign = TextAlign.End
+                    ),
+                    singleLine = true,
+                    colors = TextFieldDefaults.textFieldColors(
+                        containerColor = Color.Transparent, // Transparent background
+                        cursorColor = Color.White, // Cursor color
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent
+                    )
                 )
+
 
                 // Backspace Button
                 IconButton(
                     onClick = {
-                        if (displayText.isNotEmpty()) {
+                        if (displayText.isNotEmpty() && displayText != "0") {
                             displayText = displayText.dropLast(1)
                             if (displayText.isEmpty()) displayText = "0"
                         }
                     },
-                    enabled = displayText.isNotEmpty() && displayText != "0" // Disable if no text
+                    enabled = displayText.isNotEmpty() && displayText != "0"
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_backspace), // Use custom backspace drawable
@@ -677,7 +670,6 @@ fun CalculatorScreen(
         )
     }
 }
-
 
 @Composable
 fun ButtonGrid(onButtonClick: (String) -> Unit) {
@@ -735,6 +727,14 @@ fun ButtonGrid(onButtonClick: (String) -> Unit) {
     }
 }
 
+
+
+
+
+
+
+
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VaultScreen(
@@ -778,8 +778,8 @@ fun VaultScreen(
                         selectedFile = null
                     },
                     colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFF9800), // Match button color to app theme
-                    contentColor = Color.Black
+                        containerColor = Color(0xFFFF9800), // Match button color to app theme
+                        contentColor = Color.Black
                     )
                 ) {
                     Text("Delete from Vault")
@@ -906,169 +906,7 @@ fun VaultScreen(
 }
 
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun DecoyVaultScreen(
-    decoyFiles: List<SecretFile>, // Decoy files specific to this screen
-    onAddFile: () -> Unit,
-    onImageClick: (SecretFile) -> Unit,
-    onBack: () -> Unit,
-    onDeleteFromVault: (SecretFile) -> Unit,
-    onMoveOutOfVault: (SecretFile) -> Unit
-) {
 
-    var selectedFile by remember { mutableStateOf<SecretFile?>(null) }
-
-    selectedFile?.let { file ->
-
-        AlertDialog(
-            onDismissRequest = {
-                selectedFile = null
-            },
-            title = {
-                Text(
-                    text = "Manage File",
-                    color = Color.Black,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = "What would you like to do with this file?",
-                    color = Color.DarkGray,
-                    fontSize = 16.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteFromVault(file)
-                        selectedFile = null
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF9800),
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Text("Delete from Vault")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        onMoveOutOfVault(file)
-                        selectedFile = null
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF9800),
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Text("Move Out of Vault")
-                }
-            },
-            containerColor = Color(0xFFF5F5F5),
-            tonalElevation = 4.dp,
-            shape = RoundedCornerShape(12.dp)
-        )
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF2E2E2E))
-            .padding(16.dp)
-    ) {
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Button(
-                onClick = {
-                    onBack()
-                },
-                modifier = Modifier.weight(1f).padding(end = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-            ) {
-                Text("Back", color = Color.Black)
-            }
-            Button(
-                onClick = {
-                    onAddFile()
-                },
-                modifier = Modifier.weight(1f).padding(start = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-            ) {
-                Text("Add File", color = Color.Black)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (decoyFiles.isEmpty()) {
-            Text(
-                "Vault is empty. Add your secret files here.",
-                fontSize = 18.sp,
-                color = Color.Gray,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-        } else {
-
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(100.dp),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(decoyFiles) { file ->
-
-                    Box(
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
-                            .combinedClickable(
-                                onClick = {
-                                    onImageClick(file)
-                                },
-                                onLongClick = {
-                                    selectedFile = file
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = rememberAsyncImagePainter(file.uri),
-                            contentDescription = file.name,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(
-                                    Color.Black.copy(alpha = 0.7f),
-                                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
-                                )
-                                .padding(4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = file.actualFileName.take(15),
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun VaultFileItem(
@@ -1191,6 +1029,10 @@ fun FullScreenImageViewer(
     }
 }
 
+
+
+
+
 @Composable
 fun CalculatorDisplay(displayText: String) {
     Text(
@@ -1201,6 +1043,10 @@ fun CalculatorDisplay(displayText: String) {
         fontSize = 48.sp
     )
 }
+
+
+
+
 
 fun evaluateExpression(expression: String): String {
     return try {
