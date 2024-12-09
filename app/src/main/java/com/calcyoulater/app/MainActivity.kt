@@ -622,11 +622,6 @@ fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
     }
 }
 
-
-
-
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordScreen(
@@ -742,7 +737,7 @@ fun PasswordScreen(
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CalculatorScreen(
     onAddFile: () -> Unit,
@@ -754,7 +749,32 @@ fun CalculatorScreen(
     isFirstTime: Boolean
 ) {
     var displayText by remember { mutableStateOf("0") }
+    var realTimeAnswer by remember { mutableStateOf("") }
+    var lastValidAnswer by remember { mutableStateOf("") }
     var piTapCount by remember { mutableIntStateOf(0) }
+    val scrollState = rememberScrollState()
+
+    // Function to evaluate real-time answer
+    fun calculateRealTimeAnswer(input: String): String {
+        return try {
+            // Check if the input ends with an operator
+            if (input.endsWith("+") || input.endsWith("-") || input.endsWith("×") || input.endsWith("÷")) {
+                lastValidAnswer // Return the last valid answer for incomplete expressions
+            } else {
+                val sanitizedInput = input
+                    .replace("×", "*")
+                    .replace("÷", "/")
+                    .replace("%", "/100")
+
+                val answer = evaluateExpression(sanitizedInput) // Use the sanitized input
+                lastValidAnswer = answer // Update the last valid answer
+                answer
+            }
+        } catch (e: Exception) {
+            lastValidAnswer // Retain the last valid answer in case of any errors
+        }
+    }
+
 
     Column(
         modifier = Modifier
@@ -770,63 +790,70 @@ fun CalculatorScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Editable Display Box with Backspace
+        // Editable Display Box with Backspace, Real-Time Answer, and Vertical Stacking
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(150.dp) // Increased height for real-time answer
                 .background(
                     color = Color(0xFF1F1F1F),
                     shape = RoundedCornerShape(16.dp)
                 )
                 .padding(16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = 48.dp) // Leave space for the backspace icon
+                    .verticalScroll(scrollState),
+                horizontalAlignment = Alignment.End
             ) {
-                // Editable TextField for display
-                TextField(
-                    value = displayText,
-                    onValueChange = { newValue ->
-                        // Prevent invalid input
-                        displayText = newValue.filter { it.isDigit() || "+-*/.%()".contains(it) }
-                        if (displayText.isEmpty()) displayText = "0"
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    textStyle = TextStyle(
-                        color = Color.White, // Set the text color here
-                        fontSize = 32.sp,
-                        textAlign = TextAlign.End
-                    ),
-                    singleLine = true,
-                    colors = TextFieldDefaults.textFieldColors(
-                        containerColor = Color.Transparent, // Transparent background
-                        cursorColor = Color.White, // Cursor color
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent
-                    )
-                )
-
-
-                // Backspace Button
-                IconButton(
-                    onClick = {
-                        if (displayText.isNotEmpty() && displayText != "0") {
-                            displayText = displayText.dropLast(1)
-                            if (displayText.isEmpty()) displayText = "0"
-                        }
-                    },
-                    enabled = displayText.isNotEmpty() && displayText != "0"
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_backspace), // Use custom backspace drawable
-                        contentDescription = "Backspace",
-                        tint = if (displayText.isNotEmpty() && displayText != "0") Color.White else Color.Gray
+                // Stacked Input Display
+                displayText.chunked(17).forEach { line ->
+                    Text(
+                        text = line,
+                        style = TextStyle(
+                            color = Color.White,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Normal,
+                            textAlign = TextAlign.End
+                        ),
+                        modifier = Modifier.padding(bottom = 4.dp) // Gap between lines
                     )
                 }
+
+                // Real-Time Answer Display
+                if (realTimeAnswer.isNotEmpty()) {
+                    Text(
+                        text = realTimeAnswer,
+                        style = TextStyle(
+                            color = Color.White.copy(alpha = 0.5f), // Low-opacity text
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Light,
+                            textAlign = TextAlign.End
+                        ),
+                        modifier = Modifier.padding(top = 8.dp) // Add some spacing
+                    )
+                }
+            }
+
+            // Backspace Button
+            IconButton(
+                onClick = {
+                    if (displayText.isNotEmpty() && displayText != "0") {
+                        displayText = displayText.dropLast(1)
+                        if (displayText.isEmpty()) displayText = "0"
+                    }
+                    realTimeAnswer = calculateRealTimeAnswer(displayText)
+                },
+                enabled = displayText.isNotEmpty() && displayText != "0",
+                modifier = Modifier.align(Alignment.TopEnd) // Position in the top-right corner
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_backspace), // Use custom backspace drawable
+                    contentDescription = "Backspace",
+                    tint = if (displayText.isNotEmpty() && displayText != "0") Color.White else Color.Gray
+                )
             }
         }
 
@@ -849,16 +876,23 @@ fun CalculatorScreen(
                 } else {
                     piTapCount = 0
 
-                    displayText = when (buttonValue) {
-                        "C" -> {
-                            "0"
-                        }
-                        "=" -> {
-                            evaluateExpression(displayText)
-                        }
-                        else -> {
-                            val updatedText = if (displayText == "0") buttonValue else displayText + buttonValue
-                            updatedText
+                    if (buttonValue == "=") {
+                        // Set the final answer and clear the real-time answer
+                        displayText = realTimeAnswer
+                        realTimeAnswer = ""
+                    } else {
+                        displayText = when (buttonValue) {
+                            "C" -> {
+                                lastValidAnswer = ""  // Clear the last valid answer
+                                realTimeAnswer = ""  // Clear the real-time answer
+                                "0"                   // Reset display text to "0"
+                            }
+                            else -> {
+                                val updatedText =
+                                    if (displayText == "0") buttonValue else displayText + buttonValue
+                                realTimeAnswer = calculateRealTimeAnswer(updatedText)
+                                updatedText
+                            }
                         }
                     }
                 }
@@ -1241,25 +1275,40 @@ fun CalculatorDisplay(displayText: String) {
 }
 
 
-
-
-
 fun evaluateExpression(expression: String): String {
     return try {
         // Replace symbols with proper operators for evaluation
         val sanitizedExpression = expression
             .replace("×", "*")
             .replace("÷", "/")
-            .replace("%", "/100") // Handle percentage as division by 100
             .replace("−", "-") // Ensure minus sign compatibility
 
         val tokens = sanitizedExpression.split(Regex("(?<=[+\\-*/])|(?=[+\\-*/])")).toMutableList()
 
-        // Handle multiplication and division first
+        // Handle percentages explicitly by processing each token
+        for (i in tokens.indices) {
+            if (tokens[i].endsWith("%")) {
+                val number = tokens[i].removeSuffix("%").toBigDecimalOrNull()
+                if (number != null) {
+                    tokens[i] = number.divide(BigDecimal(100), 10, RoundingMode.HALF_UP).toPlainString()
+                } else {
+                    return "Error" // Invalid percentage input
+                }
+            }
+        }
+
+        // Process multiplication and division first
         while (tokens.contains("*") || tokens.contains("/")) {
             val index = tokens.indexOfFirst { it == "*" || it == "/" }
-            val left = tokens[index - 1].toBigDecimal()
-            val right = tokens[index + 1].toBigDecimal()
+            if (index <= 0 || index >= tokens.size - 1) {
+                return "Error" // Invalid operation
+            }
+
+            val left = tokens[index - 1].toBigDecimalOrNull()
+            val right = tokens[index + 1].toBigDecimalOrNull()
+            if (left == null || right == null) {
+                return "Error"
+            }
 
             val result = when (tokens[index]) {
                 "*" -> left.multiply(right)
@@ -1273,15 +1322,15 @@ fun evaluateExpression(expression: String): String {
         }
 
         // Then handle addition and subtraction
-        var result = tokens[0].toBigDecimal()
+        var result = tokens[0].toBigDecimalOrNull() ?: return "Error"
         var i = 1
         while (i < tokens.size) {
             val operator = tokens[i]
-            val value = tokens[i + 1].toBigDecimal()
+            val value = tokens.getOrNull(i + 1)?.toBigDecimalOrNull() ?: return "Error"
             result = when (operator) {
                 "+" -> result.add(value)
                 "-" -> result.subtract(value)
-                else -> throw IllegalArgumentException("Unexpected operator: $operator")
+                else -> return "Error"
             }
             i += 2
         }
@@ -1291,4 +1340,6 @@ fun evaluateExpression(expression: String): String {
         "Error"
     }
 }
+
+
 
