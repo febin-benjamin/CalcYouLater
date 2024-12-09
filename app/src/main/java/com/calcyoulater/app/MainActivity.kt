@@ -101,6 +101,17 @@ class MainActivity : AppCompatActivity() {
     private val selectedFileIndex = mutableStateOf(0) // Default to the first image
     private val isFirstTimeUser = mutableStateOf(true) // Assume the user is new by default
 
+    // Define decoyFiles here
+    private val decoyFiles = listOf(
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy"), "Decoy Image 1", "dummy.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy1"), "Decoy Image 2", "dummy1.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy2"), "Decoy Image 3", "dummy2.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy3"), "Decoy Image 4", "dummy3.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy5"), "Decoy Image 5", "dummy5.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy6"), "Decoy Image 6", "dummy6.png"),
+        SecretFile(Uri.parse("android.resource://com.calcyoulater.app/drawable/dummy7"), "Decoy Image 7", "dummy7.png")
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -177,9 +188,30 @@ class MainActivity : AppCompatActivity() {
                         onMoveOutOfVault = { file -> moveOutOfVault(file) }
                     )
                     "PasswordScreen" -> PasswordScreen(
-                        onPasswordCorrect = { currentScreen.value = "Vault" },
-                        onPasswordIncorrect = { currentScreen.value = "Calculator" }
+                        onPasswordCorrect = { decoy ->
+                            if (decoy) {
+                                currentScreen.value = "DecoyVault"
+                            } else {
+                                currentScreen.value = "Vault"
+                            }
+                        },
+                        onDecoyPassword = {
+                            currentScreen.value = "DecoyVault"
+                        },
+                        onPasswordIncorrect = {
+                            currentScreen.value = "Calculator"
+                        }
                     )
+
+                    "DecoyVault" -> DecoyVaultScreen(
+                        decoyFiles = decoyFiles,
+                        onAddFile = { println("Add File is disabled in Decoy Vault") },
+                        onImageClick = { println("Image clicked in Decoy Vault") },
+                        onBack = { currentScreen.value = "Calculator" },
+                        onDeleteFromVault = { println("Delete operation not allowed in Decoy Vault") },
+                        onMoveOutOfVault = { println("Move operation not allowed in Decoy Vault") }
+                    )
+
                     "FullScreenImageViewer" -> FullScreenImageViewer(
                         files = files.value,
                         selectedIndex = selectedFileIndex.value,
@@ -198,7 +230,6 @@ class MainActivity : AppCompatActivity() {
 
         // Check if the app is returning from the background
         if (currentScreen.value == "Vault" || currentScreen.value == "FullScreenImageViewer") {
-            println("App resumed while on a secure screen. Redirecting to PasswordScreen.")
             currentScreen.value = "PasswordScreen" // Force the user to re-enter the password
         } else {
             println("App resumed on non-secure screen: ${currentScreen.value}")
@@ -304,6 +335,169 @@ class MainActivity : AppCompatActivity() {
 }
 
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun DecoyVaultScreen(
+    decoyFiles: List<SecretFile>, // Decoy files specific to this screen
+    onAddFile: () -> Unit,
+    onImageClick: (SecretFile) -> Unit,
+    onBack: () -> Unit,
+    onDeleteFromVault: (SecretFile) -> Unit,
+    onMoveOutOfVault: (SecretFile) -> Unit
+) {
+
+    var selectedFile by remember { mutableStateOf<SecretFile?>(null) }
+
+    selectedFile?.let { file ->
+
+        AlertDialog(
+            onDismissRequest = {
+                selectedFile = null
+            },
+            title = {
+                Text(
+                    text = "Manage File",
+                    color = Color.Black,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "What would you like to do with this file?",
+                    color = Color.DarkGray,
+                    fontSize = 16.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteFromVault(file)
+                        selectedFile = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Delete from Vault")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        onMoveOutOfVault(file)
+                        selectedFile = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Move Out of Vault")
+                }
+            },
+            containerColor = Color(0xFFF5F5F5),
+            tonalElevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF2E2E2E))
+            .padding(16.dp)
+    ) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Button(
+                onClick = {
+                    onBack()
+                },
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+            ) {
+                Text("Back", color = Color.Black)
+            }
+            Button(
+                onClick = {
+                    onAddFile()
+                },
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+            ) {
+                Text("Add File", color = Color.Black)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (decoyFiles.isEmpty()) {
+            Text(
+                "Vault is empty. Add your secret files here.",
+                fontSize = 18.sp,
+                color = Color.Gray,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+        } else {
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(100.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(decoyFiles) { file ->
+
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                            .combinedClickable(
+                                onClick = {
+                                    onImageClick(file)
+                                },
+                                onLongClick = {
+                                    selectedFile = file
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(file.uri),
+                            contentDescription = file.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(
+                                    Color.Black.copy(alpha = 0.7f),
+                                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
+                                )
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = file.actualFileName.take(15),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -436,25 +630,24 @@ fun PasswordSetupScreen(onPasswordSet: (String) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordScreen(
-    onPasswordCorrect: () -> Unit,
+    onPasswordCorrect: (Boolean) -> Unit, // Accept a Boolean parameter
+    onDecoyPassword: () -> Unit,
     onPasswordIncorrect: () -> Unit
 ) {
     val context = LocalContext.current
     val sharedPreferences = context.getSharedPreferences("CalcYouLaterPrefs", MODE_PRIVATE)
     val correctPassword = sharedPreferences.getString("userPassword", "") ?: ""
-
+    val decoyPassword = "4836" // Reserved password for the decoy vault
 
     var countdown by remember { mutableStateOf(15) }
     var password by remember { mutableStateOf("") }
     val focusRequesterList = List(4) { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
-    // Automatically request focus for the first field
     LaunchedEffect(Unit) {
         focusRequesterList[0].requestFocus()
     }
 
-    // Countdown logic
     LaunchedEffect(Unit) {
         while (countdown > 0) {
             kotlinx.coroutines.delay(1000L)
@@ -509,11 +702,19 @@ fun PasswordScreen(
                         }
 
                         if (password.length == 4) {
+                            when (password) {
+                                correctPassword -> {
+                                    onPasswordCorrect(false) // Navigate to actual vault
+                                }
 
-                            if (password == correctPassword) {
-                                onPasswordCorrect()
-                            } else {
-                                onPasswordIncorrect()
+                                decoyPassword -> {
+                                    onPasswordCorrect(true) // Navigate to decoy vault
+                                }
+
+                                else -> {
+                                    password = "" // Reset on incorrect password
+                                    onPasswordIncorrect()
+                                }
                             }
                         }
                     },
@@ -539,11 +740,6 @@ fun PasswordScreen(
         }
     }
 }
-
-
-
-
-
 
 
 @OptIn(ExperimentalMaterial3Api::class)
